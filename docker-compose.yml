@@ -45,36 +45,16 @@ services:
       retries: 3
       start_period: 10s
 
+    # Join the external network your existing containers are already on.
+    # Create it once with: docker network create proxy
+    # Then add --network proxy (or network_mode) to your existing containers,
+    # or reference them by host IP if they are on a different host/network.
     networks:
       - proxy
 
     # Graceful reload: docker kill -s HUP haproxy
-    # This triggers HAProxy's zero-downtime config reload (-sf).
-
-    depends_on:
-      - app1
-      - app2
-
-  # ── Example backend services (replace with your real app containers) ─────────
-  app1:
-    image: nginx:alpine
-    container_name: app1
-    restart: unless-stopped
-    networks:
-      - proxy
-
-  app2:
-    image: nginx:alpine
-    container_name: app2
-    restart: unless-stopped
-    networks:
-      - proxy
 
 # ── Networks ──────────────────────────────────────────────────────────────────
 networks:
   proxy:
-    driver: bridge
-    # Set to `external: true` and create it manually if you want multiple
-    # compose stacks to share the same HAProxy instance:
-    #   docker network create proxy
-    # external: true
+    external: true   # Must already exist: docker network create proxy
