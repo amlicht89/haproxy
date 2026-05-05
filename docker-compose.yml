@@ -1,0 +1,80 @@
+services:
+
+  # ── HAProxy Load Balancer ────────────────────────────────────────────────────
+  haproxy:
+    image: haproxy:3.2-alpine        # LTS Alpine – small footprint, stable API
+    container_name: haproxy
+    restart: unless-stopped
+
+    # Kernel param required so the non-root haproxy user can bind to ports < 1024
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+
+    ports:
+      - "80:80"       # HTTP
+      - "443:443"     # HTTPS (add your cert volume below when ready)
+      - "8404:8404"   # HAProxy Stats UI  →  http://localhost:8404/stats
+
+    volumes:
+      # HAProxy core config – root directory, alongside docker-compose.yml
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      # Application backend configs – one .cfg per app under apps/
+      - ./apps:/usr/local/etc/haproxy/apps:ro
+      # Optional: TLS certificates
+      # - ./certs:/usr/local/etc/haproxy/certs:ro
+      # Optional: custom error pages
+      # - ./errors:/usr/local/etc/haproxy/errors:ro
+
+    # Load root config + all per-app configs from apps/; fail fast on any error
+    command: >
+      haproxy -c
+        -f /usr/local/etc/haproxy/haproxy.cfg
+        -f /usr/local/etc/haproxy/apps
+
+    healthcheck:
+      test:
+        - "CMD"
+        - "haproxy"
+        - "-c"
+        - "-f"
+        - "/usr/local/etc/haproxy/haproxy.cfg"
+        - "-f"
+        - "/usr/local/etc/haproxy/apps"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - proxy
+
+    # Graceful reload: docker kill -s HUP haproxy
+    # This triggers HAProxy's zero-downtime config reload (-sf).
+
+    depends_on:
+      - app1
+      - app2
+
+  # ── Example backend services (replace with your real app containers) ─────────
+  app1:
+    image: nginx:alpine
+    container_name: app1
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  app2:
+    image: nginx:alpine
+    container_name: app2
+    restart: unless-stopped
+    networks:
+      - proxy
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  proxy:
+    driver: bridge
+    # Set to `external: true` and create it manually if you want multiple
+    # compose stacks to share the same HAProxy instance:
+    #   docker network create proxy
+    # external: true
